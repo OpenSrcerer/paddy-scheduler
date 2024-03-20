@@ -1,0 +1,10 @@
+quarkus:
+  package:
+    output-name: paddy-scheduler
+
+  devservices:
+    enabled: false
+
+  rest-client:
+    jwt:
+      http2: true

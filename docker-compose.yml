@@ -1,0 +1,20 @@
+version: "3.8"
+
+networks:
+  paddy-bridge:
+    driver: bridge
+
+services:
+  paddy-scheduler:
+    container_name: paddy-scheduler
+    networks:
+      paddy-bridge:
+        aliases:
+          - paddy.scheduler.io
+#    build: .
+    image: ghcr.io/opensrcerer/paddy-scheduler:master
+    restart: on-failure
+    ports:
+      - "80:80"
+    env_file:
+      - ".env"
