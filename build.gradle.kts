@@ -16,6 +16,13 @@ val quarkusPlatformVersion: String by project
 dependencies {
     implementation(enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}"))
 
+    // Scheduler
+    implementation("io.quarkus:quarkus-scheduler")
+
+    // Neo4j
+    implementation("org.neo4j:neo4j-ogm-quarkus:3.6.0")
+    implementation("io.quarkiverse.neo4j:quarkus-neo4j:3.6.0")
+
     // Reactive REST
     implementation("io.quarkus:quarkus-rest-client-reactive-jackson")
     implementation("io.quarkus:quarkus-config-yaml")
