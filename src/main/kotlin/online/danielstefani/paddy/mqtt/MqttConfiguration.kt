@@ -17,4 +17,14 @@ interface MqttConfiguration {
 
     @WithDefault("daemon/+/v1/reads")
     fun deviceReadTopic(): String
+
+    // ---- Meta ----
+    fun subscriptions(): String
+
+    fun getSubscriptions(): List<String> {
+        if (subscriptions().isEmpty())
+            throw IllegalArgumentException("No subscriptions provided!")
+
+        return subscriptions().split(",")
+    }
 }

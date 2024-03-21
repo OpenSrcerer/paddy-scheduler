@@ -8,12 +8,14 @@ import com.hivemq.client.mqtt.mqtt5.message.auth.Mqtt5SimpleAuth
 import com.hivemq.client.mqtt.mqtt5.message.connect.connack.Mqtt5ConnAck
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5Publish
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5PublishResult
+import com.hivemq.client.mqtt.mqtt5.message.subscribe.Mqtt5Subscription
 import io.quarkus.logging.Log
 import io.quarkus.runtime.StartupEvent
 import io.reactivex.*
 import io.reactivex.Observable
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import online.danielstefani.paddy.cron.CronController
 import online.danielstefani.paddy.jwt.JwtAuthClient
 import online.danielstefani.paddy.jwt.dto.JwtRequestDto
 import online.danielstefani.paddy.jwt.dto.JwtType
@@ -27,6 +29,7 @@ import java.util.*
 @ApplicationScoped
 class RxMqttClient(
     private val mqttConfig: MqttConfiguration,
+    private val cronController: CronController,
     @RestClient private val paddyAuth: JwtAuthClient
 ) {
     // Singleton
@@ -77,7 +80,7 @@ class RxMqttClient(
         // ---- Build Client ----
         val client = Mqtt5Client.builder()
             .identifier(
-                "${mqttConfig.clientId()}-$mqttClientId".apply {
+                "${mqttConfig.clientId()}-scheduler-$mqttClientId".apply {
                     Log.info("[client->mqtt->reaper] // Building new MQTT client: $this")
                 }
             )
@@ -104,6 +107,7 @@ class RxMqttClient(
                 // Need to do this because RxJava's
                 // error handling mechanism is futile
                 // Project Reactor >>>>
+                .flatMap { mqttClient!!.applySubscription() }
                 .`as` { Flux.from(it.toFlowable(BackpressureStrategy.BUFFER)) }
                 .retryWhen(
                     Retry.fixedDelay(Long.MAX_VALUE, Duration.ofSeconds(5))
@@ -136,6 +140,33 @@ class RxMqttClient(
                     return@onErrorResumeNext Single.never<Mqtt5ConnAck>()
 
                 Single.error(it)
+            }
+            .toObservable()
+    }
+
+    /**
+     * Subscribe to the given topics.
+     */
+    private fun Mqtt5RxClient.applySubscription(): Observable<Mqtt5Publish> {
+        return this.subscribePublishesWith()
+            .addSubscriptions(
+                mqttConfig.getSubscriptions()
+                    .map {
+                        Mqtt5Subscription.builder()
+                            .topicFilter(it)
+                            .qos(MqttQos.AT_LEAST_ONCE)
+                            .build()
+                    })
+            .applySubscribe()
+            .doOnSubscribe {
+                Log.info("[client->mqtt] // " + "Subscribing to topics [" +
+                        "${mqttConfig.getSubscriptions().joinToString(", ") { "'${it}'" }}]")
+            }
+            .doOnNext { cronController.onScheduleUpdate(it) }
+            .doOnError { Log.error("[client->mqtt] Error while ingesting MQTT Message", it) }
+            .doOnTerminate {
+                Log.info("[client->mqtt] // " +
+                        "Connection to ${mqttConfig.host()}:${mqttConfig.port()} ended.")
             }
             .toObservable()
     }
