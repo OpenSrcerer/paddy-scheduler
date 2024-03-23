@@ -68,7 +68,7 @@ class RxMqttClient(
                 .qos(qos)
                 .payload(message.toByteArray())
                 .build()))
-            ?.doOnComplete { Log.info("[client->mqtt] Successfully published <$message> to <$topic>!") }
+            ?.map { if (it.error.isPresent) throw it.error.get() else it }
     }
 
     /**
