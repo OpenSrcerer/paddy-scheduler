@@ -1,8 +1,5 @@
 package online.danielstefani.paddy.cron
 
-import com.cronutils.model.CronType
-import com.cronutils.model.definition.CronDefinitionBuilder
-import com.cronutils.parser.CronParser
 import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5PublishResult
 import io.quarkus.logging.Log
@@ -14,52 +11,39 @@ import online.danielstefani.paddy.mqtt.RxMqttClient
 import online.danielstefani.paddy.schedule.Schedule
 import online.danielstefani.paddy.schedule.ScheduleRepository
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 
 @ApplicationScoped
 class CronService(
     private val scheduleRepository: ScheduleRepository,
     private val mqttClient: RxMqttClient
 ) {
-    companion object {
-        private val cronParser = CronParser(
-            CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ))
-    }
+    internal val scheduledCrons = HashSet<Schedule>()
 
-    private val scheduledCrons = HashSet<Schedule>()
-
-    fun reloadSchedule(id: Long, remove: Boolean = false) {
+    fun reloadSchedule(id: Long) {
         scheduledCrons.removeIf { it.id == id }
-
-        if (remove) return
-
-        val schedule = scheduleRepository.get(id)!!
-        if (schedule.isSingle()) {
-            scheduledCrons.add(schedule)
-            return
-        }
-
-        schedule.cron = cronParser.parse(schedule.periodic)
+        val schedule = scheduleRepository.get(id).also { it?.load() } ?: return
+        scheduledCrons.add(schedule)
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    fun executeSchedules(): Flux<Mqtt5PublishResult> {
+    fun executeSchedules(): Mono<Int> {
+        Log.debug("[cron->service] There are [${scheduledCrons.size}] schedule(s) in the pool.")
+
         val publishes = scheduledCrons
             .filter { it.shouldExecute() }
             .mapNotNull { executeSchedule(it) }
 
         return Flux.from(Flowable.concat(publishes))
+            .collectList()
+            .map { publishes.size }
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
     private fun executeSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult>? {
-        // Run single schedules immediately, then delete them
-        if (!schedule.shouldExecute()) {
-            Log.debug("[cron->service] Schedule ${schedule.id} is not ready to run yet. Skipping.")
-            return null
-        }
-
         // Run the schedule, then update it in the database
-        return runSchedule(schedule).concatWith(reSchedule(schedule))
+        return runSchedule(schedule)
+            .concatWith(reSchedule(schedule))
             .doOnSubscribe {  Log.debug("[cron->service] Schedule ${schedule.id} is ready! Executing...") }
             .doOnComplete { Log.debug("[cron->service] Executed <${schedule.id!!}> successfully!") }
             .doOnError { Log.error("[cron->service] Failed to execute <${schedule.id!!}>", it) }
@@ -83,13 +67,20 @@ class CronService(
      Reload
      */
     private fun reSchedule(schedule: Schedule): Completable {
-        val dbActionCompletable = if (schedule.isSingle())
-            Completable.fromCallable { scheduleRepository.delete(schedule.id!!) }
+        val dbActionCompletable = if (schedule.hasExpired())
+            Completable.fromCallable {
+                Log.debug("[cron->service] Schedule <${schedule.id}> has expired, removing.")
+                scheduleRepository.delete(schedule.id!!)
+            }
         else
-            Completable.fromCallable {  }
+            Completable.fromCallable {
+                scheduleRepository.update(schedule.id!!) {
+                    it.nextExecution = schedule.nextExecution()
+                }
+            }
 
         val reloadCompletable = Completable.fromCallable {
-            reloadSchedule(schedule.id!!, schedule.isSingle())
+            reloadSchedule(schedule.id!!)
         }
 
         return dbActionCompletable.concatWith(reloadCompletable)

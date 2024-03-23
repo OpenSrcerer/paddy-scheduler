@@ -7,19 +7,28 @@ import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import online.danielstefani.paddy.schedule.ScheduleRepository
+import java.util.concurrent.TimeUnit
 
 @ApplicationScoped
 class CronController(
     private val scheduleRepository: ScheduleRepository,
     private val cronService: CronService
 ) {
+    private var schedulesExecuted = 0
+
+    @Scheduled(delay = 1, delayUnit = TimeUnit.MINUTES, every = "1m")
+    fun scheduleStatistics() {
+        Log.info("[cron] [pool: ${cronService.scheduledCrons.size}] Executed <$schedulesExecuted> schedule(s) in the last minute.")
+
+        schedulesExecuted = 0
+    }
+
     // Execute schedules if needed
-    @Scheduled(every = "5s")
+    @Scheduled(delay = 5, delayUnit = TimeUnit.SECONDS, every = "1s")
     fun executeSchedules() {
         cronService.executeSchedules()
-            .doOnSubscribe { Log.info("[cron] Executing schedules...") }
-            .doOnComplete { Log.info("[cron] Finished executing schedules") }
-            .doOnError { Log.error("[cron] Failed executing schedules", it) }
+            .doOnSuccess { schedulesExecuted += it }
+            .doOnError { Log.error("[cron] Failed executing schedule(s)", it) }
             .subscribe()
     }
 
@@ -29,13 +38,13 @@ class CronController(
             .onEach { cronService.reloadSchedule(it.id!!) }
             .size
 
-        Log.info("[cron] Loaded <$schedules>")
+        Log.info("[cron] Loaded <$schedules> schedule(s) to execute.")
     }
 
     // Receive CRUD events from backend
     fun onScheduleUpdate(mqtt5Publish: Mqtt5Publish) {
         val scheduleId = mqtt5Publish.topic.levels.last().toLong()
-        Log.debug("[cron] Received an update for schedule <$scheduleId>")
+        Log.debug("[cron] Received an update for schedule <$scheduleId>.")
 
         cronService.reloadSchedule(scheduleId)
     }

@@ -1,30 +1,31 @@
 package online.danielstefani.paddy.schedule
 
-import io.quarkus.logging.Log
 import jakarta.enterprise.context.ApplicationScoped
+import online.danielstefani.paddy.util.get
 import org.neo4j.ogm.session.SessionFactory
-import org.neo4j.ogm.session.queryForObject
 
 @ApplicationScoped
 class ScheduleRepository(
     private val factory: SessionFactory
 ) {
+    companion object {
+        // Represents how deep should neo4j
+        // load the entity's relationships
+        const val SCHEDULE_LOAD_DEPTH = 2
+    }
+
     fun get(id: Long): Schedule? {
         return with(factory.openSession()) {
-            val query =
-                """
-                    MATCH (sx:Schedule)
-                        WHERE ID(sx) = $id
-                    RETURN sx
-                """
-
-            this.queryForObject(query, emptyMap())
+            this.load(Schedule::class.java, id, SCHEDULE_LOAD_DEPTH)
         }
     }
 
     fun getAll(): Collection<Schedule> {
         return with(factory.openSession()) {
-            this.loadAll(Schedule::class.java)
+            this.query(
+                "MATCH (sx:Schedule) RETURN sx",
+                emptyMap<String, String>()
+            ).get()
         }
     }
 
@@ -37,16 +38,16 @@ class ScheduleRepository(
             get(id)?.also {
                 updater.invoke(it)
 
+                it.daemon = null
+
                 this.save(it)
             }
         }
-
     }
 
     fun delete(id: Long): Schedule? {
         return with(factory.openSession()) {
             get(id)?.also {
-                Log.info(it)
                 this.delete(it)
             }
         }

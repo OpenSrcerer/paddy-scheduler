@@ -5,16 +5,59 @@ networks:
     driver: bridge
 
 services:
-  paddy-scheduler:
-    container_name: paddy-scheduler
+  paddy-backend:
+    container_name: paddy-backend
     networks:
       paddy-bridge:
         aliases:
-          - paddy.scheduler.io
-#    build: .
-    image: ghcr.io/opensrcerer/paddy-scheduler:master
+          - paddy.backend.io
+    image: ghcr.io/opensrcerer/paddy-backend:master
     restart: on-failure
     ports:
+      - "443:80" # Redirect https traffic to http because we are using a terminating LB
       - "80:80"
     env_file:
-      - ".env"
+      - ".env.others"
+
+  paddy-auth:
+    container_name: paddy-auth
+    networks:
+      paddy-bridge:
+        aliases:
+          - paddy.auth.io
+    #    build: .
+    image: ghcr.io/opensrcerer/paddy-auth:master
+    restart: on-failure
+    ports:
+      - "81:80"
+    env_file:
+      - ".env.others"
+
+  emqx1:
+    image: emqx:5.5.0
+    container_name: emqx1
+    restart: on-failure
+    networks:
+      paddy-bridge:
+        aliases:
+          - node1.emqx.io
+    ports:
+      - "1883:1883"
+      - "18083:18083"
+
+  neo4j:
+    image: neo4j:5.16.0
+    container_name: neo4j
+    restart: on-failure
+    networks:
+      paddy-bridge:
+        aliases:
+          - paddy.neo4j.io
+    volumes:
+      - /home/chronos/neo4j/data:/data
+      - /home/chronos/neo4j/logs:/logs
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/bonkersdbobcat
