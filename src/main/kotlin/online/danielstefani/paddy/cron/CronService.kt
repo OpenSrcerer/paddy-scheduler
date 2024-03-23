@@ -7,6 +7,7 @@ import io.reactivex.Completable
 import io.reactivex.Flowable
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
+import online.danielstefani.paddy.daemon.DaemonRepository
 import online.danielstefani.paddy.mqtt.RxMqttClient
 import online.danielstefani.paddy.schedule.Schedule
 import online.danielstefani.paddy.schedule.ScheduleRepository
@@ -16,6 +17,7 @@ import reactor.core.publisher.Mono
 @ApplicationScoped
 class CronService(
     private val scheduleRepository: ScheduleRepository,
+    private val daemonRepository: DaemonRepository,
     private val mqttClient: RxMqttClient
 ) {
     internal val scheduledCrons = HashSet<Schedule>()
@@ -30,40 +32,49 @@ class CronService(
     fun executeSchedules(): Mono<Int> {
         Log.debug("[cron->service] There are [${scheduledCrons.size}] schedule(s) in the pool.")
 
-        val publishes = scheduledCrons
+        val executed = scheduledCrons
             .filter { it.shouldExecute() }
-            .mapNotNull { executeSchedule(it) }
+            .map { executeSchedule(it) }
 
-        return Flux.from(Flowable.concat(publishes))
+        return Flux.from(Flowable.concat(executed))
             .collectList()
-            .map { publishes.size }
+            .map { executed.size }
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    private fun executeSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult>? {
+    private fun executeSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult> {
         // Run the schedule, then update it in the database
         return runSchedule(schedule)
             .concatWith(reSchedule(schedule))
-            .doOnSubscribe {  Log.debug("[cron->service] Schedule ${schedule.id} is ready! Executing...") }
+            .doOnSubscribe { Log.debug("[cron->service] Schedule ${schedule.id} is ready! Executing...") }
             .doOnComplete { Log.debug("[cron->service] Executed <${schedule.id!!}> successfully!") }
             .doOnError { Log.error("[cron->service] Failed to execute <${schedule.id!!}>", it) }
     }
 
+    /*
+    1) Update the status of the Daemon in the DB.
+    2) Send a notification through MQTT to inform the Daemon
+     */
     private fun runSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult> {
-        return mqttClient.publish(
+        val dbActionCompletable = Completable.fromCallable {
+            daemonRepository.updateState(schedule.daemon!!.id!!, schedule.type!!.toBoolean())
+        }
+        val publishCompletable = mqttClient.publish(
             schedule.daemon!!.id!!,
             schedule.type!!.name.lowercase(),
             qos = MqttQos.EXACTLY_ONCE)!!
+
+        return publishCompletable.concatWith(dbActionCompletable)
     }
 
     /*
-     If single:
+     - If single:
      Delete the schedule.
 
-     If periodic:
+     - If periodic:
      Update the last execution time
 
-     For both:
+     - For both:
      Reload
      */
     private fun reSchedule(schedule: Schedule): Completable {
