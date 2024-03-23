@@ -33,7 +33,6 @@ class DaemonRepository(
                     SET node.on = ${on ?: !it.on}
                     RETURN node
                 """
-                Log.info(query)
 
                 this.query(query, mapOf<String, String>())
             }
