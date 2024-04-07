@@ -38,7 +38,7 @@ class ScheduleRepository(
             get(id)?.also {
                 updater.invoke(it)
 
-                it.daemon = null
+                it.daemon = null // here to prevent daemon saves
 
                 this.save(it)
             }

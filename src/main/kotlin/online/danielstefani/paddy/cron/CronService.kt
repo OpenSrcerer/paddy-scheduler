@@ -1,12 +1,11 @@
 package online.danielstefani.paddy.cron
 
 import com.hivemq.client.mqtt.datatypes.MqttQos
-import com.hivemq.client.mqtt.mqtt5.message.publish.Mqtt5PublishResult
 import io.quarkus.logging.Log
-import io.reactivex.Completable
 import io.reactivex.Flowable
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
+import online.danielstefani.paddy.daemon.Daemon
 import online.danielstefani.paddy.daemon.DaemonRepository
 import online.danielstefani.paddy.mqtt.RxMqttClient
 import online.danielstefani.paddy.schedule.Schedule
@@ -22,12 +21,6 @@ class CronService(
 ) {
     internal val scheduledCrons = HashSet<Schedule>()
 
-    fun reloadSchedule(id: Long) {
-        scheduledCrons.removeIf { it.id == id }
-        val schedule = scheduleRepository.get(id).also { it?.load() } ?: return
-        scheduledCrons.add(schedule)
-    }
-
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     fun executeSchedules(): Mono<Int> {
         Log.debug("[cron->service] There are [${scheduledCrons.size}] schedule(s) in the pool.")
@@ -42,29 +35,41 @@ class CronService(
     }
 
     @Transactional(Transactional.TxType.MANDATORY)
-    private fun executeSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult> {
+    private fun executeSchedule(schedule: Schedule): Mono<Unit> {
         // Run the schedule, then update it in the database
         return runSchedule(schedule)
-            .concatWith(reSchedule(schedule))
+            .flatMap { reSchedule(schedule) }
             .doOnSubscribe { Log.debug("[cron->service] Schedule ${schedule.id} is ready! Executing...") }
-            .doOnComplete { Log.debug("[cron->service] Executed <${schedule.id!!}> successfully!") }
+            .doOnSuccess { Log.debug("[cron->service] Executed <${schedule.id!!}> successfully!") }
             .doOnError { Log.error("[cron->service] Failed to execute <${schedule.id!!}>", it) }
+            .log()
+    }
+
+    fun reloadSchedule(schedule: Schedule?) {
+        if (schedule == null) {
+            Log.error("[cron->service] Could not reload schedule, it was null after updater!")
+            return
+        }
+
+        scheduledCrons.removeIf { it.id == schedule.id }
+        scheduledCrons.add(schedule)
     }
 
     /*
     1) Send a notification through MQTT to inform the Daemon
     2) Update the status of the Daemon in the DB
      */
-    private fun runSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult> {
-        val dbActionCompletable = Completable.fromCallable {
+    private fun runSchedule(schedule: Schedule): Mono<Daemon?> {
+        val dbActionMono = Mono.fromCallable {
             daemonRepository.updateState(schedule.daemon!!.id!!, schedule.type!!.toBoolean())
         }
-        val publishCompletable = mqttClient.publish(
+        val publishFlowable = mqttClient.publish(
             schedule.daemon!!.id!!,
             schedule.type!!.name.lowercase(),
             qos = MqttQos.EXACTLY_ONCE)!!
 
-        return publishCompletable.concatWith(dbActionCompletable)
+        return Mono.fromDirect(publishFlowable)
+            .flatMap { dbActionMono }
     }
 
     /*
@@ -77,24 +82,22 @@ class CronService(
      - For both:
      Reload
      */
-    private fun reSchedule(schedule: Schedule): Completable {
-        val dbActionCompletable = if (schedule.hasExpired())
-            Completable.fromCallable {
+    private fun reSchedule(schedule: Schedule): Mono<Unit> {
+        val dbActionMono = if (schedule.hasExpired())
+            Mono.fromCallable {
                 Log.debug("[cron->service] Schedule <${schedule.id}> has expired, removing.")
                 scheduleRepository.delete(schedule.id!!)
             }
         else
-            Completable.fromCallable {
+            Mono.fromCallable {
                 scheduleRepository.update(schedule.id!!) {
                     it.nextExecution = schedule.nextExecution()
                 }
             }
 
                 .doOnError { Log.error("error:", it) }
-                .doOnComplete { Log.info("Updated: ${schedule.nextExecution!!}") }
+                .doOnSuccess { Log.info("Updated: ${schedule.nextExecution!!}") }
 
-        val reloadCompletable = Completable.fromCallable { reloadSchedule(schedule.id!!) }
-
-        return dbActionCompletable.concatWith(reloadCompletable)
+        return dbActionMono.map { reloadSchedule(it) }
     }
 }
