@@ -25,7 +25,7 @@ class ScheduleRepository(
             this.query(
                 "MATCH (sx:Schedule) RETURN sx",
                 emptyMap<String, String>()
-            ).get<Schedule>().also { it.map { sch -> sch.load() } }
+            ).get()
         }
     }
 
@@ -41,7 +41,7 @@ class ScheduleRepository(
                 it.daemon = null // here to prevent daemon saves
 
                 this.save(it)
-            }?.also { it.load() }
+            }
         }
     }
 

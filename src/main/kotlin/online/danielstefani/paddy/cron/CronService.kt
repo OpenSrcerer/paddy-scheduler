@@ -45,14 +45,12 @@ class CronService(
             .log()
     }
 
-    /*
-    Effectively removes the schedule only if it is null.
-     */
-    fun reloadSchedule(schedule: Schedule?) {
-        scheduledCrons.removeIf { it.id == schedule?.id }
+    fun reloadSchedule(id: Long) {
+        scheduledCrons.removeIf { it.id == id }
 
-        if (schedule != null)
-            scheduledCrons.add(schedule)
+        val schedule = scheduleRepository.get(id) ?: return
+
+        scheduledCrons.add(schedule)
     }
 
     /*
@@ -98,6 +96,6 @@ class CronService(
                 .doOnError { Log.error("error:", it) }
                 .doOnSuccess { Log.info("Updated: ${schedule.nextExecution!!}") }
 
-        return dbActionMono.map { reloadSchedule(it) }
+        return dbActionMono.map { reloadSchedule(it?.id!!) }
     }
 }
