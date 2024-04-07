@@ -61,7 +61,7 @@ open class Schedule {
 
     Remember to update the last execution when finishing.
      */
-    init {
+    fun load() {
         cron = if (!isSingle()) cronParser.parse(periodic)
             else null
         nextExecution = nextExecution ?: nextExecution()
