@@ -98,7 +98,7 @@ open class Schedule {
         // will never execute.
         val isReady = nextExecution!! < timeNowAdjusted
 
-        Log.info("""[cron->service] Schedule <${id!!}> status:
+        Log.trace("""[cron->service] Schedule <${id!!}> status:
             [Single]:     ${isSingle()}
             [Ready]:      $isReady
             [Cron]:       ${periodic ?: "N/A"}

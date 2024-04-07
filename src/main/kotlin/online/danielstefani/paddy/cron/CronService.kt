@@ -42,7 +42,6 @@ class CronService(
             .doOnSubscribe { Log.debug("[cron->service] Schedule ${schedule.id} is ready! Executing...") }
             .doOnSuccess { Log.debug("[cron->service] Executed <${schedule.id!!}> successfully!") }
             .doOnError { Log.error("[cron->service] Failed to execute <${schedule.id!!}>", it) }
-            .log()
     }
 
     fun reloadSchedule(id: Long) {
@@ -92,9 +91,6 @@ class CronService(
                     it.nextExecution = schedule.nextExecution()
                 }
             }
-
-                .doOnError { Log.error("error:", it) }
-                .doOnSuccess { Log.info("Updated: ${schedule.nextExecution!!}") }
 
         return dbActionMono.map { reloadSchedule(it?.id!!) }
     }
