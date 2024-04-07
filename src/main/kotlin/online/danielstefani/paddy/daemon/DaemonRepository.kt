@@ -1,6 +1,5 @@
 package online.danielstefani.paddy.daemon
 
-import io.quarkus.logging.Log
 import jakarta.enterprise.context.ApplicationScoped
 import org.neo4j.ogm.session.SessionFactory
 import org.neo4j.ogm.session.queryForObject
@@ -27,7 +26,6 @@ class DaemonRepository(
     ): Daemon? {
         return with(factory.openSession()) {
             get(id)?.also {
-
                 val query = """
                     MATCH (node:Daemon { id: "$id" })
                     SET node.on = ${on ?: !it.on}

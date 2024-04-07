@@ -24,7 +24,7 @@ open class Schedule {
         private const val LATENCY_SECONDS = 1
 
         private val cronParser = CronParser(
-            CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ))
+            CronDefinitionBuilder.instanceDefinitionFor(CronType.UNIX))
     }
 
     @Id
@@ -44,7 +44,7 @@ open class Schedule {
     // Signifies that this Schedule will run periodically.
     var periodic: String? = null
 
-    // The last time this Schedule was executed
+    // The next time this Schedule will be executed
     var nextExecution: Long? = null
 
     // Signifies that this Schedule will finish running at some point.
