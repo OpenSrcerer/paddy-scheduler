@@ -45,14 +45,14 @@ class CronService(
             .log()
     }
 
+    /*
+    Effectively removes the schedule only if it is null.
+     */
     fun reloadSchedule(schedule: Schedule?) {
-        if (schedule == null) {
-            Log.error("[cron->service] Could not reload schedule, it was null after updater!")
-            return
-        }
+        scheduledCrons.removeIf { it.id == schedule?.id }
 
-        scheduledCrons.removeIf { it.id == schedule.id }
-        scheduledCrons.add(schedule)
+        if (schedule != null)
+            scheduledCrons.add(schedule)
     }
 
     /*

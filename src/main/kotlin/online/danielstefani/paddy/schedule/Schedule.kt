@@ -96,7 +96,7 @@ open class Schedule {
 
         val isReady = nextExec < timeNowAdjusted
 
-        Log.trace("""[cron->service] Schedule <${id!!}> status:
+        Log.info("""[cron->service] Schedule <${id!!}> status:
             [Single]:     ${isSingle()}
             [Ready]:      $isReady
             [Cron]:       ${periodic ?: "N/A"}

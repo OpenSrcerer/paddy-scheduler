@@ -7,6 +7,7 @@ import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
 import online.danielstefani.paddy.schedule.ScheduleRepository
+import reactor.core.publisher.Mono
 import java.util.concurrent.TimeUnit
 
 @ApplicationScoped
@@ -35,7 +36,7 @@ class CronController(
     // Load schedules at startup
     fun loadSchedules(@Observes event: StartupEvent) {
         val schedules = scheduleRepository.getAll()
-            .onEach { cronService.reloadSchedule(it.id!!) }
+            .onEach { cronService.reloadSchedule(it) }
             .size
 
         Log.info("[cron] Loaded <$schedules> schedule(s) to execute.")
@@ -46,6 +47,8 @@ class CronController(
         val scheduleId = mqtt5Publish.topic.levels.last().toLong()
         Log.debug("[cron] Received an update for schedule <$scheduleId>.")
 
-        cronService.reloadSchedule(scheduleId)
+        Mono.fromCallable { scheduleRepository.get(scheduleId) }
+            .map { cronService.reloadSchedule(it) }
+            .subscribe()
     }
 }
