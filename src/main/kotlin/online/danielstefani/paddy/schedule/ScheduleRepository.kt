@@ -17,7 +17,7 @@ class ScheduleRepository(
     fun get(id: Long): Schedule? {
         return with(factory.openSession()) {
             this.load(Schedule::class.java, id, SCHEDULE_LOAD_DEPTH)
-        }?.also { it.load() }
+        }
     }
 
     fun getAll(): Collection<Schedule> {
