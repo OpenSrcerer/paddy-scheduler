@@ -94,7 +94,9 @@ open class Schedule {
         val zonedTimeNow = ZonedDateTime.ofInstant(Instant.ofEpochSecond(timeNow), ZoneId.of(timezone))
         val nextExec = nextExecution(zonedTimeNow)
 
-        val isReady = nextExec < timeNowAdjusted
+        // This comparison has to be with the old execution, or the task
+        // will never execute.
+        val isReady = nextExecution!! < timeNowAdjusted
 
         Log.info("""[cron->service] Schedule <${id!!}> status:
             [Single]:     ${isSingle()}
