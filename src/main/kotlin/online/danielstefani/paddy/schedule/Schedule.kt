@@ -96,10 +96,10 @@ open class Schedule {
 
         val isReady = nextExec < timeNowAdjusted
 
-        Log.info("""[cron->service] Schedule <${id!!}> status:
+        Log.trace("""[cron->service] Schedule <${id!!}> status:
             [Single]:     ${isSingle()}
             [Ready]:      $isReady
-            [Cron]:       $periodic
+            [Cron]:       ${periodic ?: "N/A"}
             [Timezone]:   $timezone
             [Last Exec.]: ${lastExecution(zonedTimeNow)} (UNIX s)
             [Time Now]:   $timeNow (UNIX s)

@@ -52,8 +52,8 @@ class CronService(
     }
 
     /*
-    1) Update the status of the Daemon in the DB.
-    2) Send a notification through MQTT to inform the Daemon
+    1) Send a notification through MQTT to inform the Daemon
+    2) Update the status of the Daemon in the DB
      */
     private fun runSchedule(schedule: Schedule): Flowable<Mqtt5PublishResult> {
         val dbActionCompletable = Completable.fromCallable {
@@ -89,6 +89,9 @@ class CronService(
                     it.nextExecution = schedule.nextExecution()
                 }
             }
+
+                .doOnError { Log.error("error:", it) }
+                .doOnComplete { Log.info("Updated: ${schedule.nextExecution!!}") }
 
         val reloadCompletable = Completable.fromCallable { reloadSchedule(schedule.id!!) }
 
