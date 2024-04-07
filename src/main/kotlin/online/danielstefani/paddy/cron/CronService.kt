@@ -90,9 +90,7 @@ class CronService(
                 }
             }
 
-        val reloadCompletable = Completable.fromCallable {
-            reloadSchedule(schedule.id!!)
-        }
+        val reloadCompletable = Completable.fromCallable { reloadSchedule(schedule.id!!) }
 
         return dbActionCompletable.concatWith(reloadCompletable)
     }

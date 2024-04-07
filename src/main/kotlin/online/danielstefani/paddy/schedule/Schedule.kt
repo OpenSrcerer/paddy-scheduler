@@ -37,11 +37,8 @@ open class Schedule {
     // Defaults to UTC
     var timezone = TimeZone.getTimeZone("UTC").toZoneId().id
 
-    // Signifies that this Schedule will run only once.
-    // Execution time in UNIX seconds
-    var single: Long? = null
-
     // Signifies that this Schedule will run periodically.
+    // Does not exist on single tasks.
     var periodic: String? = null
 
     // The next time this Schedule will be executed
@@ -65,7 +62,8 @@ open class Schedule {
     Remember to update the last execution when finishing.
      */
     fun load() {
-        cron = if (periodic != null) cronParser.parse(periodic) else null
+        cron = if (!isSingle()) cronParser.parse(periodic)
+            else null
         nextExecution = nextExecution ?: nextExecution()
     }
 
@@ -74,19 +72,19 @@ open class Schedule {
     }
 
     fun isSingle(): Boolean {
-        return single != null
+        return periodic == null
     }
 
     fun nextExecution(
         zonedDateTime: ZonedDateTime = ZonedDateTime.now(ZoneId.of(timezone))
-    ): Long? {
-        return single ?: execution { it.nextExecution(zonedDateTime) }
+    ): Long {
+        return execution { it.nextExecution(zonedDateTime) }
     }
 
     fun lastExecution(
         zonedDateTime: ZonedDateTime = ZonedDateTime.now(ZoneId.of(timezone))
-    ): Long? {
-        return single ?: execution { it.lastExecution(zonedDateTime) }
+    ): Long {
+        return execution { it.lastExecution(zonedDateTime) }
     }
 
     fun shouldExecute(): Boolean {
@@ -96,27 +94,27 @@ open class Schedule {
         val zonedTimeNow = ZonedDateTime.ofInstant(Instant.ofEpochSecond(timeNow), ZoneId.of(timezone))
         val nextExec = nextExecution(zonedTimeNow)
 
-        val isSingleAndReady = isSingle() && single!! < timeNowAdjusted
-        val isPeriodicAndReady = nextExecution!! < timeNowAdjusted
+        val isReady = nextExec < timeNowAdjusted
 
-        Log.trace("""[cron->service] Schedule <${id!!}> status:
+        Log.info("""[cron->service] Schedule <${id!!}> status:
             [Single]:     ${isSingle()}
-            [Ready]:      ${isPeriodicAndReady || isSingleAndReady}
+            [Ready]:      $isReady
             [Cron]:       $periodic
             [Timezone]:   $timezone
-            [Last Exec.]: ${lastExecution(zonedTimeNow) ?: "N/A"} (UNIX s)
+            [Last Exec.]: ${lastExecution(zonedTimeNow)} (UNIX s)
             [Time Now]:   $timeNow (UNIX s)
-            [Next Exec.]: ${nextExec ?: single} (UNIX s)
-            [Until Next]: ${abs((nextExec ?: single!!) - timeNow)} (UNIX s)
+            [Next Exec.]: $nextExec (UNIX s)
+            [Until Next]: ${abs(nextExec - timeNow)} (UNIX s)
             [Finish]:     ${finish ?: "N/A"} (UNIX s)
             [Until Fin.]: ${if (finish != null) abs(finish!! - timeNow) else "N/A"} (UNIX s)
         """.trimIndent())
 
-        return isSingleAndReady || isPeriodicAndReady
+        return isReady
     }
 
-    private fun execution(selector: (ExecutionTime) -> Optional<ZonedDateTime>): Long? {
-        if (isSingle()) return null
+    private fun execution(selector: (ExecutionTime) -> Optional<ZonedDateTime>): Long {
+        if (isSingle())
+            return nextExecution!!
 
         return selector.invoke(ExecutionTime.forCron(cron!!))
             .map { it.toEpochSecond() }
