@@ -1,3 +1,7 @@
+<p align="center">
+    <img src="img/paddy_scheduler.png" alt="logo" width="250"/>
+</p>
+
 > ⚠️ Documentation is still WIP. Expect more updates around May.
 
 # Paddy Scheduler
