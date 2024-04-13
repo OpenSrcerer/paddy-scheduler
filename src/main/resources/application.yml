@@ -1,4 +1,9 @@
 quarkus:
+  native:
+    additional-build-args:
+      - '--initialize-at-run-time=com.hivemq.client.internal.mqtt.codec.encoder.MqttPingReqEncoder'
+      - '--initialize-at-run-time=com.hivemq.client.internal.mqtt.codec.encoder.mqtt3.Mqtt3DisconnectEncoder'
+
   package:
     output-name: paddy-scheduler
 
