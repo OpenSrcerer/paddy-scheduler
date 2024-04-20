@@ -1,25 +1,19 @@
-FROM ghcr.io/graalvm/graalvm-ce:ol8-java17-22.3.3 AS BUILD
+FROM gradle:8.4.0-jdk17-jammy AS BUILD
 
 WORKDIR /appbuild
 
 COPY . .
 
-RUN gu install native-image
+RUN gradle build -Dquarkus.package.type=uber-jar --no-daemon
 
-RUN ./gradlew build --no-daemon -Dquarkus.package.type=native
+FROM amazoncorretto:17-alpine as CORRETTO-JDK
 
+#COPY --from=corretto-jdk /jre /app/jre
+COPY --from=build /appbuild/build/paddy-scheduler-runner.jar /app/paddy-scheduler-runner.jar
 
-FROM quay.io/quarkus/quarkus-micro-image:2.0 AS NATIVE
+WORKDIR /app
 
-WORKDIR /work
+ARG DEBUG_OPT
+ENV DEBUG_API_OPT=$DEBUG_OPT
 
-COPY --from=BUILD /appbuild/* .
-
-RUN chown 1001 /work \
-    && chmod "g+rwX" /work \
-    && chown 1001:root /work
-
-EXPOSE 8080
-USER 1001
-
-CMD ["/work/quarkus-build/gen/paddy-scheduler-runner", "-Dquarkus.http.host=0.0.0.0"]
+CMD java $DEBUG_API_OPT -jar paddy-scheduler-runner.jar
