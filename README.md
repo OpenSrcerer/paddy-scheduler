@@ -18,7 +18,7 @@ The scheduling component of this project aims to do something that can be very e
 While many extensions and similar formats have been created today, classic Cron jobs are formatted as space-delimited strings, with five distinct positions for temporal values.
 
 <p align="center">
-    <img src="img/cron.png" alt="Cron Job Example Diagram"/>
+    <img src="img/cron.png" alt="Cron Job Example Diagram" width="400"/>
 </p>
 
 > While usually numbers are used to describe each temporal unit, asterisks can be used to mean “every”. In addition, operators such as commas, dashes and slashes can be used to specify a wider type of values with a simpler syntax, such as a value list, value range, or step values.
